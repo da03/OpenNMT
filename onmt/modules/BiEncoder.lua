@@ -173,7 +173,7 @@ function BiEncoder:backward(batch, gradStatesOutput, gradContextOutput)
     gradStatesOutputBwd = gradStatesOutput
   end
 
-  local gradInputFwd = self.fwd:backward(batch, gradStatesOutputFwd, gradContextOutputFwd)
+  self.fwd:backward(batch, gradStatesOutputFwd, gradContextOutputFwd)
 
   -- reverse gradients of the backward context
   local gradContextBwd = onmt.utils.Tensor.reuseTensor(self.gradContextBwdProto,
