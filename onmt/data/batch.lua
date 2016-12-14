@@ -128,6 +128,34 @@ function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
   end
 end
 
+--[[ Im2Markup: set with a sequence of features
+  * features: a tensor of size sequence_length, batch_size, num_hidden
+--]]
+function Batch:set_encoder(features)
+    assert (features:dim() == 3, 'The features tensor should be of size seq_len, batch_size, num_hidden')
+    self.size = features:size(2)
+    self.sourceLength = features:size(1)
+    self.sourceInputFeatures = {}
+    self.sourceInputRevReatures = {}
+    self.sourceInput = features
+    self.sourceInputRev = self.sourceInput:index(1, torch.linspace(self.sourceLength, 1, self.sourceLength):long())
+    return self
+end
+--[[ Im2Markup: set with a sequence of features
+  * targetInput: a tensor of size sequence_length, batch_size
+  * targetOutput: a tensor of size sequence_length, batch_size
+  * contextLength: length of context, scalar
+--]]
+function Batch:set_decoder(targetInput, targetOutput, contextLength)
+    self.targetInput, self.targetOutput = targetInput, targetOutput
+    self.sourceLength = contextLength
+    self.size = targetInput:size(2)
+    self.totalSize = self.size
+    self.targetLength = targetInput:size(1)
+    self.targetInputFeatures = {}
+    self.targetOutputFeatures = {}
+    return self
+end
 function Batch:getSourceInput(t)
   -- If a regular input, return word id, otherwise a table with features.
   if #self.sourceInputFeatures > 0 then
