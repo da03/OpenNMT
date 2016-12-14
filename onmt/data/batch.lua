@@ -45,6 +45,9 @@ local Batch = torch.class('Batch')
   (optional). Data format is shown at the top of the file.
 --]]
 function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
+  src = src or {}
+  srcFeatures = srcFeatures or {}
+  tgtFeatures = tgtFeatures or {}
   if tgt ~= nil then
     assert(#src == #tgt, "source and target must have the same batch size")
   end
