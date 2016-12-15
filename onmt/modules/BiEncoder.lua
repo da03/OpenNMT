@@ -149,6 +149,9 @@ function BiEncoder:forward(batch)
 end
 
 function BiEncoder:backward(batch, gradStatesOutput, gradContextOutput)
+  gradStatesOutput = gradStatesOutput or onmt.utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
+                                                         onmt.utils.Cuda.convert(torch.Tensor()),
+                                                         { batch.size, self.args.rnnSize*2 })
   local gradContextOutputFwd
   local gradContextOutputBwd
 

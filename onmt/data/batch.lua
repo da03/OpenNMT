@@ -48,6 +48,7 @@ function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
   src = src or {}
   srcFeatures = srcFeatures or {}
   tgtFeatures = tgtFeatures or {}
+
   if tgt ~= nil then
     assert(#src == #tgt, "source and target must have the same batch size")
   end
@@ -131,34 +132,45 @@ function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
   end
 end
 
---[[ Im2Markup: set with a sequence of features
-  * features: a tensor of size sequence_length, batch_size, num_hidden
+--[[ Set sourceInput directly, can be either a Tensor of size (sequence_length, batch_size, feature_dim)
+--  , or a sequence of size (sequence_length, batch_size). Be aware that sourceInput is not cloned here.
+  * sourceInput: a tensor of size (sequence_length, batch_size, ...)
 --]]
-function Batch:set_encoder(features)
-    assert (features:dim() == 3, 'The features tensor should be of size seq_len, batch_size, num_hidden')
-    self.size = features:size(2)
-    self.sourceLength = features:size(1)
+function Batch:setSourceInput(sourceInput)
+    assert (sourceInput:dim() >= 2, 'The sourceInput tensor should be of size (seq_len, batch_size, ...)')
+    self.size = sourceInput:size(2)
+    self.sourceLength = sourceInput:size(1)
     self.sourceInputFeatures = {}
     self.sourceInputRevReatures = {}
-    self.sourceInput = features
+    self.sourceInput = sourceInput
     self.sourceInputRev = self.sourceInput:index(1, torch.linspace(self.sourceLength, 1, self.sourceLength):long())
     return self
 end
---[[ Im2Markup: set with a sequence of features
-  * targetInput: a tensor of size sequence_length, batch_size
-  * targetOutput: a tensor of size sequence_length, batch_size
-  * contextLength: length of context, scalar
+
+--[[ Set targetInput directly. Be aware that targetInput is not cloned here.
+  * targetInput: a tensor of size (sequence_length, batch_size). Padded with onmt.Constants.PAD
 --]]
-function Batch:set_decoder(targetInput, targetOutput, contextLength)
-    self.targetInput, self.targetOutput = targetInput, targetOutput
-    self.sourceLength = contextLength
+function Batch:setTargetInput(targetInput)
+    assert (targetInput:dim() == 2, 'The targetInput tensor should be of size (seq_len, batch_size)')
+    self.targetInput = targetInput
     self.size = targetInput:size(2)
     self.totalSize = self.size
     self.targetLength = targetInput:size(1)
     self.targetInputFeatures = {}
+    self.targetSize = torch.sum(targetInput:transpose(1,2):ne(onmt.Constants.PAD), 2):view(-1):double()
+    return self
+end
+
+--[[ Set targetOutput directly. Be aware that targetOutput is not cloned here.
+  * targetOutput: a tensor of size (sequence_length, batch_size). Padded with onmt.Constants.PAD
+--]]
+function Batch:setTargetOutput(targetOutput)
+    assert (targetOutput:dim() == 2, 'The targetOutput tensor should be of size (seq_len, batch_size)')
+    self.targetOutput = targetOutput
     self.targetOutputFeatures = {}
     return self
 end
+
 function Batch:getSourceInput(t)
   -- If a regular input, return word id, otherwise a table with features.
   if #self.sourceInputFeatures > 0 then

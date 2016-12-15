@@ -290,7 +290,8 @@ function model:step(batch, forward_only, beam_size, trie)
         local imgH = #cnn_output_list
         local source_l = cnn_output_list[1]:size()[2]
         local context = self.context_proto[{{1, batch_size}, {1, source_l*imgH}}] --batch_size, source_l*imgH, 512
-        local dec_batch = Batch():set_decoder(target, target_eval, context:size(2))
+        local dec_batch = Batch():setTargetInput(target):setTargetOutput(target_eval)
+        dec_batch.sourceLength = context:size(2)
         for i = 1, imgH do
             local pos = localize(torch.zeros(batch_size)):fill(i)
             local pos_embedding_fw  = self.pos_embedding_fw:forward(pos):view(1,batch_size,-1) --1,batch_size,512
@@ -299,7 +300,7 @@ function model:step(batch, forward_only, beam_size, trie)
             source = cnn_output:transpose(1,2) -- imgW,batch_size,512
             local input = torch.cat(pos_embedding_fw, source, 1)
             input = torch.cat(input, pos_embedding_bw, 1)
-            local batch = Batch():set_encoder(input)
+            local batch = Batch():setSourceInput(input)
             local _, row_context = self.encoder:forward(batch)
             for t = 1, source_l do
                 counter = (i-1)*source_l + t
@@ -350,7 +351,6 @@ function model:step(batch, forward_only, beam_size, trie)
                     assert(false, 'does not support ndim except for 2 and 3')
                 end
             end
-            rnn_state_dec = reset_state(self.beam_init_fwd_dec, batch_size, 0)
             local beam_context = beam_replicate(context)
             local decoder_input
             local beam_input
@@ -361,7 +361,6 @@ function model:step(batch, forward_only, beam_size, trie)
                 dec_states[i]:zero()
             end
             local dec_out = nil
-            --dec_outputs = self.decoder:forward(dec_batch, statesProto, context)
             for t = 1, target_l do
                 local dec_context
                 if t == 1 then
@@ -370,7 +369,7 @@ function model:step(batch, forward_only, beam_size, trie)
                 else
                     dec_context = beam_context
                 end
-                dec_out, dec_states = self.decoder:forward_one(beam_input, dec_states, dec_context, dec_out, t)
+                dec_out, dec_states = self.decoder:forwardOne(beam_input, dec_states, dec_context, dec_out, t)
                 local probs = self.decoder.generator:forward(dec_out)[1] -- t~=0, batch_size*beam_size, vocab_size; t=0, batch_size,vocab_size
                 local current_indices, raw_indices
                 local beam_parents
@@ -413,14 +412,7 @@ function model:step(batch, forward_only, beam_size, trie)
                 end
             end
         else -- forward_only == false
-            -- set decoder states
-            local statesProto = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
-                                                    localize(torch.Tensor()),
-                                                    { dec_batch.size, self.decoder.args.rnnSize })
-            for i = 1, #statesProto do
-                statesProto[i]:zero()
-            end
-            dec_outputs = self.decoder:forward(dec_batch, statesProto, context)
+            dec_outputs = self.decoder:forward(dec_batch, nil, context)
         end
         local loss, accuracy = 0.0, 0.0
         if forward_only then
@@ -442,62 +434,48 @@ function model:step(batch, forward_only, beam_size, trie)
             accuracy = batch_size - word_err
             if self.visualize then
                 -- get gold score
-                local statesProto = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
-                                                        localize(torch.Tensor()),
-                                                        { dec_batch.size, self.decoder.args.rnnSize })
-                for i = 1, #statesProto do
-                    statesProto[i]:zero()
-                end
-                local gold_scores = self.decoder:compute_score(dec_batch, statesProto, context)
-                -- use predictions to visualize attns
-                local attn_probs = localize(torch.zeros(batch_size, target_l, source_l*imgH))
-                local attn_positions_h = localize(torch.zeros(batch_size, target_l))
-                local attn_positions_w = localize(torch.zeros(batch_size, target_l))
-                local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
-                                                        localize(torch.Tensor()),
-                                                        { batch_size, self.decoder.args.rnnSize })
-                for i = 1, #dec_states do
-                    dec_states[i]:zero()
-                end
-                local dec_out = nil
-                --dec_outputs = self.decoder:forward(dec_batch, statesProto, context)
-                for t = 1, target_l do
-                    if t == 1 then
-                        decoder_input = dec_batch:get_target_input(t)
-                    else
-                        decoder_input = labels[{{1,batch_size},t-1}]
-                    end
-                    dec_out, dec_states = self.decoder:forward_one(decoder_input(t), dec_states, context, dec_out, t)
-                    local softmax_out = self.decoder.softmax_attn.output
-                    -- print attn
-                    attn_probs[{{}, t, {}}]:copy(softmax_out)
-                    local _, attn_inds = torch.max(softmax_out, 2) --batch_size, 1
-                    attn_inds = attn_inds:view(-1) --batch_size
-                    for kk = 1, batch_size do
-                        local counter = attn_inds[kk]
-                        local p_i = math.floor((counter-1) / source_l) + 1
-                        local p_t = counter-1 - (p_i-1)*source_l + 1
-                        attn_positions_h[kk][t] = p_i
-                        attn_positions_w[kk][t] = p_t
-                        --print (string.format('%d, %d', p_i, p_t))
-                    end
-                    local pred = self.decoder.generator:forward(dec_out) --batch_size, vocab_size
+                local gold_scores = self.decoder:computeScore(dec_batch, nil, context)
+                ---- use predictions to visualize attns
+                --local attn_probs = localize(torch.zeros(batch_size, target_l, source_l*imgH))
+                --local attn_positions_h = localize(torch.zeros(batch_size, target_l))
+                --local attn_positions_w = localize(torch.zeros(batch_size, target_l))
+                --local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
+                --                                        localize(torch.Tensor()),
+                --                                        { batch_size, self.decoder.args.rnnSize })
+                --for i = 1, #dec_states do
+                --    dec_states[i]:zero()
+                --end
+                --local dec_out = nil
+                --for t = 1, target_l do
+                --    if t == 1 then
+                --        decoder_input = dec_batch:getTargetInput(t)
+                --    else
+                --        decoder_input = labels[{{1,batch_size},t-1}]
+                --    end
+                --    dec_out, dec_states = self.decoder:forwardOne(decoder_input, dec_states, context, dec_out, t)
+                --    local softmax_out = self.decoder.softmaxAttn.output -- call maskPadding first
+                --    -- print attn
+                --    attn_probs[{{}, t, {}}]:copy(softmax_out)
+                --    local _, attn_inds = torch.max(softmax_out, 2) --batch_size, 1
+                --    attn_inds = attn_inds:view(-1) --batch_size
+                --    for kk = 1, batch_size do
+                --        local counter = attn_inds[kk]
+                --        local p_i = math.floor((counter-1) / source_l) + 1
+                --        local p_t = counter-1 - (p_i-1)*source_l + 1
+                --        attn_positions_h[kk][t] = p_i
+                --        attn_positions_w[kk][t] = p_t
+                --        --print (string.format('%d, %d', p_i, p_t))
+                --    end
+                --    local pred = self.decoder.generator:forward(dec_out) --batch_size, vocab_size
 
-                end
+                --end
                 for i = 1, #img_paths do
                     self.visualize_file:write(string.format('%s\t%s\t%s\t%f\t%f\t\n', img_paths[i], labels_gold[i], labels_pred[i], scores[i], gold_scores[i]))
                 end
                 self.visualize_file:flush()
             end
             -- get gold score
-            dec_batch = Batch():set_decoder(target, target_eval, context:size(2))
-            local statesProto = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
-                                                    localize(torch.Tensor()),
-                                                    { dec_batch.size, self.decoder.args.rnnSize })
-            for i = 1, #statesProto do
-                statesProto[i]:zero()
-            end
-            loss = self.decoder:compute_loss(dec_batch, statesProto, context, self.criterion)/batch_size
+            loss = self.decoder:computeLoss(dec_batch, nil, context, self.criterion)/batch_size
         else
             for i = 1, #self.grad_params do
                 self.grad_params[i]:zero()
@@ -526,12 +504,9 @@ function model:step(batch, forward_only, beam_size, trie)
                 local pos_embedding_bw = self.pos_embedding_bw:forward(pos):view(1,batch_size,-1)
                 local input = torch.cat(pos_embedding_fw, source, 1)
                 input = torch.cat(input, pos_embedding_bw, 1) --source_l+2, batch_size, hidden
-                local batch = Batch():set_encoder(input)
+                local batch = Batch():setSourceInput(input)
                 local _, row_context = self.encoder:forward(batch)
-                local gradOutputsProto = utils.Tensor.initTensorTable(self.encoder.args.numEffectiveLayers,
-                                                         localize(torch.Tensor()),
-                                                         { batch.size, self.encoder.args.rnnSize*2 })
-                local row_context_grad = self.encoder:backward(batch, gradOutputsProto, grad_context:select(2,i))
+                local row_context_grad = self.encoder:backward(batch, nil, grad_context:select(2,i))
                 -- source_l+2, batch_size, hidden
                 for t = 1, source_l do
                     cnn_grad[{i, {}, t, {}}]:copy(row_context_grad[t])
