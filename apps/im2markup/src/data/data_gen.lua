@@ -6,7 +6,7 @@
  --]]
 require 'image'
 require 'paths'
-require 'utils'
+require 'src.utils.utils'
 require 'class'
 tds = require('tds')
 

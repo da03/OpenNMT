@@ -4,17 +4,10 @@ require 'nn'
 require 'cudnn'
 require 'optim'
 require 'paths'
-require('../../../../onmt/utils')
-require('../../../../onmt/modules')
-package.path = package.path .. ';src/?.lua' .. ';src/utils/?.lua' .. ';src/model/?.lua' .. ';src/optim/?.lua'
-require 'cnn'
-require 'LSTM'
-require 'output_projector'
-require 'criterion'
-require 'model_utils'
-require 'optim_adadelta'
-require 'optim_sgd'
-require 'memory'
+require 'src.model.cnn'
+require 'src.model.criterion'
+require 'src.utils.model_utils'
+require 'src.optim.optim_sgd'
 
 local model = torch.class('Model')
 
@@ -52,12 +45,11 @@ function model:load(model_path, config)
 
     local checkpoint = torch.load(model_path)
     local model, model_config = checkpoint[1], checkpoint[2]
-    preallocateMemory(model_config.prealloc)
     self.cnn_model = model[1]:double()
-    self.encoder = model[2]:double()
-    self.decoder = model[3]:double()      
-    self.pos_embedding_fw = model[6]:double()
-    self.pos_embedding_bw = model[7]:double()
+    self.encoder = onmt.BiEncoder.load(model[2])
+    self.decoder = onmt.Decoder.load(model[3])
+    self.pos_embedding_fw = model[4]:double()
+    self.pos_embedding_bw = model[5]:double()
     self.global_step = checkpoint[3]
     self.optim_state = checkpoint[4]
     id2vocab = checkpoint[5]
@@ -109,13 +101,13 @@ function model:create(config)
     self.input_feed = config.input_feed
     self.batch_size = config.batch_size
     self.prealloc = config.prealloc
-    preallocateMemory(config.prealloc)
 
     self.pos_embedding_fw = nn.Sequential():add(nn.LookupTable(self.max_encoder_l_h,self.encoder_num_layers*self.encoder_num_hidden*2))
     self.pos_embedding_bw = nn.Sequential():add(nn.LookupTable(self.max_encoder_l_h, self.encoder_num_layers*self.encoder_num_hidden*2))
     -- CNN model, input size: (batch_size, 1, 32, width), output size: (batch_size, sequence_length, 512)
     self.cnn_model = createCNNModel()
     -- biLSTM encoder
+    print (onmt.LSTM)
     local rnn = onmt.LSTM.new(self.encoder_num_layers, self.cnn_feature_size, self.encoder_num_hidden, self.dropout)
     local input_network = nn.Sequential():add(nn.Identity())
     self.encoder = onmt.BiEncoder.new(input_network, rnn, 'concat')
@@ -180,7 +172,7 @@ function model:_build()
     -- convert to cuda if use gpu
     self.layers = {self.cnn_model, self.encoder, self.decoder, self.pos_embedding_fw, self.pos_embedding_bw}
     for i = 1, #self.layers do
-        utils.Cuda.convert(self.layers[i])
+        onmt.utils.Cuda.convert(self.layers[i])
     end
     localize(self.criterion)
 
@@ -244,9 +236,9 @@ function model:step(batch, forward_only, beam_size, trie)
             collectgarbage()
         end
     end
-    local input_batch = utils.Cuda.convert(batch[1])
-    local target_batch = utils.Cuda.convert(batch[2])
-    local target_eval_batch = utils.Cuda.convert(batch[3])
+    local input_batch = onmt.utils.Cuda.convert(batch[1])
+    local target_batch = onmt.utils.Cuda.convert(batch[2])
+    local target_eval_batch = onmt.utils.Cuda.convert(batch[3])
     local num_nonzeros = batch[4]
     local img_paths
     if self.visualize then
@@ -354,7 +346,7 @@ function model:step(batch, forward_only, beam_size, trie)
             local beam_context = beam_replicate(context)
             local decoder_input
             local beam_input
-            local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
+            local dec_states = onmt.utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
                                                     localize(torch.Tensor()),
                                                     { batch_size, self.decoder.args.rnnSize })
             for i = 1, #dec_states do
@@ -439,7 +431,7 @@ function model:step(batch, forward_only, beam_size, trie)
                 --local attn_probs = localize(torch.zeros(batch_size, target_l, source_l*imgH))
                 --local attn_positions_h = localize(torch.zeros(batch_size, target_l))
                 --local attn_positions_w = localize(torch.zeros(batch_size, target_l))
-                --local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
+                --local dec_states = onmt.utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
                 --                                        localize(torch.Tensor()),
                 --                                        { batch_size, self.decoder.args.rnnSize })
                 --for i = 1, #dec_states do
@@ -557,7 +549,7 @@ function model:save(model_path)
     for i = 1, #self.layers do
         self.layers[i]:clearState()
     end
-    torch.save(model_path, {{self.cnn_model, self.encoder_fw, self.encoder_bw, self.decoder, self.output_projector, self.pos_embedding_fw, self.pos_embedding_bw}, self.config, self.global_step, self.optim_state, id2vocab})
+    torch.save(model_path, {{self.cnn_model, self.encoder:serialize(), self.decoder:serialize(), self.pos_embedding_fw, self.pos_embedding_bw}, self.config, self.global_step, self.optim_state, id2vocab})
 end
 
 function model:shutdown()

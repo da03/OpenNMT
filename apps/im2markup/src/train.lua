@@ -4,12 +4,10 @@ torch.setheaptracking(true)
 require 'nn'
 require 'nngraph'
 require 'cudnn'
-require 'optim'
 require 'paths'
 
-package.path = package.path .. ';../../?.lua' .. ';src/?.lua' .. ';src/model/?.lua'
-utils = require('../../../onmt/utils')
-onmt = require('../../../onmt')
+package.path = package.path .. ';../../?.lua'
+require('../../../onmt/init')
 require 'src.model.model'
 require 'src.data.data_gen'
 require 'src.utils.logging'
@@ -205,7 +203,7 @@ function main()
     logging:info(table.concat(arg, ' '))
     logging:info('End Command Line Arguments')
     opt.gpuid = opt.gpu_id
-    utils.Cuda.init(opt)
+    onmt.utils.Cuda.init(opt)
     local phase= opt.phase
     local batch_size = opt.batch_size
     local num_epochs = opt.num_epochs
