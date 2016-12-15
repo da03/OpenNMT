@@ -150,7 +150,7 @@ end
 
 function BiEncoder:backward(batch, gradStatesOutput, gradContextOutput)
   gradStatesOutput = gradStatesOutputs or utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
-                                                         utils.Cuda.Convert(torch.Tensor()),
+                                                         utils.Cuda.convert(torch.Tensor()),
                                                          { batch.size, self.args.rnnSize*2 })
   local gradContextOutputFwd
   local gradContextOutputBwd
@@ -176,7 +176,7 @@ function BiEncoder:backward(batch, gradStatesOutput, gradContextOutput)
     gradStatesOutputBwd = gradStatesOutput
   end
 
-  self.fwd:backward(batch, gradStatesOutputFwd, gradContextOutputFwd)
+  local gradInputFwd = self.fwd:backward(batch, gradStatesOutputFwd, gradContextOutputFwd)
 
   -- reverse gradients of the backward context
   local gradContextBwd = onmt.utils.Tensor.reuseTensor(self.gradContextBwdProto,

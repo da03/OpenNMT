@@ -280,7 +280,7 @@ end
 --]]
 function Decoder:forward(batch, encoderStates, context)
   encoderStates = encoderStates or utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
-                                                    utils.Cuda.Convert(torch.Tensor()),
+                                                    utils.Cuda.convert(torch.Tensor()),
                                                     { batch.size, self.args.rnnSize })
   if self.train then
     self.inputs = {}
@@ -365,7 +365,7 @@ end
 --[[ Compute the loss on a batch based on final layer `generator`.]]
 function Decoder:computeLoss(batch, encoderStates, context, criterion)
   encoderStates = encoderStates or utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
-                                                    utils.Cuda.Convert(torch.Tensor()),
+                                                    utils.Cuda.convert(torch.Tensor()),
                                                     { batch.size, self.args.rnnSize })
   local loss = 0
   self:forwardAndApply(batch, encoderStates, context, function (out, t)
@@ -382,7 +382,7 @@ end
 ]]
 function Decoder:computeScore(batch, encoderStates, context)
   encoderStates = encoderStates or utils.Tensor.initTensorTable(self.args.numEffectiveLayers,
-                                                    utils.Cuda.Convert(torch.Tensor()),
+                                                    utils.Cuda.convert(torch.Tensor()),
                                                     { batch.size, self.args.rnnSize })
   local score = {}
 

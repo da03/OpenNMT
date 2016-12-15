@@ -435,40 +435,40 @@ function model:step(batch, forward_only, beam_size, trie)
             if self.visualize then
                 -- get gold score
                 local gold_scores = self.decoder:computeScore(dec_batch, nil, context)
-                -- use predictions to visualize attns
-                local attn_probs = localize(torch.zeros(batch_size, target_l, source_l*imgH))
-                local attn_positions_h = localize(torch.zeros(batch_size, target_l))
-                local attn_positions_w = localize(torch.zeros(batch_size, target_l))
-                local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
-                                                        localize(torch.Tensor()),
-                                                        { batch_size, self.decoder.args.rnnSize })
-                for i = 1, #dec_states do
-                    dec_states[i]:zero()
-                end
-                local dec_out = nil
-                for t = 1, target_l do
-                    if t == 1 then
-                        decoder_input = dec_batch:get_target_input(t)
-                    else
-                        decoder_input = labels[{{1,batch_size},t-1}]
-                    end
-                    dec_out, dec_states = self.decoder:forwardOne(decoder_input(t), dec_states, context, dec_out, t)
-                    local softmax_out = self.decoder.softmax_attn.output
-                    -- print attn
-                    attn_probs[{{}, t, {}}]:copy(softmax_out)
-                    local _, attn_inds = torch.max(softmax_out, 2) --batch_size, 1
-                    attn_inds = attn_inds:view(-1) --batch_size
-                    for kk = 1, batch_size do
-                        local counter = attn_inds[kk]
-                        local p_i = math.floor((counter-1) / source_l) + 1
-                        local p_t = counter-1 - (p_i-1)*source_l + 1
-                        attn_positions_h[kk][t] = p_i
-                        attn_positions_w[kk][t] = p_t
-                        --print (string.format('%d, %d', p_i, p_t))
-                    end
-                    local pred = self.decoder.generator:forward(dec_out) --batch_size, vocab_size
+                ---- use predictions to visualize attns
+                --local attn_probs = localize(torch.zeros(batch_size, target_l, source_l*imgH))
+                --local attn_positions_h = localize(torch.zeros(batch_size, target_l))
+                --local attn_positions_w = localize(torch.zeros(batch_size, target_l))
+                --local dec_states = utils.Tensor.initTensorTable(self.decoder.args.numEffectiveLayers,
+                --                                        localize(torch.Tensor()),
+                --                                        { batch_size, self.decoder.args.rnnSize })
+                --for i = 1, #dec_states do
+                --    dec_states[i]:zero()
+                --end
+                --local dec_out = nil
+                --for t = 1, target_l do
+                --    if t == 1 then
+                --        decoder_input = dec_batch:getTargetInput(t)
+                --    else
+                --        decoder_input = labels[{{1,batch_size},t-1}]
+                --    end
+                --    dec_out, dec_states = self.decoder:forwardOne(decoder_input, dec_states, context, dec_out, t)
+                --    local softmax_out = self.decoder.softmaxAttn.output -- call maskPadding first
+                --    -- print attn
+                --    attn_probs[{{}, t, {}}]:copy(softmax_out)
+                --    local _, attn_inds = torch.max(softmax_out, 2) --batch_size, 1
+                --    attn_inds = attn_inds:view(-1) --batch_size
+                --    for kk = 1, batch_size do
+                --        local counter = attn_inds[kk]
+                --        local p_i = math.floor((counter-1) / source_l) + 1
+                --        local p_t = counter-1 - (p_i-1)*source_l + 1
+                --        attn_positions_h[kk][t] = p_i
+                --        attn_positions_w[kk][t] = p_t
+                --        --print (string.format('%d, %d', p_i, p_t))
+                --    end
+                --    local pred = self.decoder.generator:forward(dec_out) --batch_size, vocab_size
 
-                end
+                --end
                 for i = 1, #img_paths do
                     self.visualize_file:write(string.format('%s\t%s\t%s\t%f\t%f\t\n', img_paths[i], labels_gold[i], labels_pred[i], scores[i], gold_scores[i]))
                 end
