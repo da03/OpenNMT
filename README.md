@@ -13,7 +13,8 @@ maintaining efficiency and state-of-the-art translation
 accuracy. Features include:
 
 * Speed and memory optimizations for high-performance GPU training.
-* Simple general-purpose interface, only requires and source/target data files.
+* Simple general-purpose interface, only requires and source/target
+ data files.
 * C-only decoder implementation for easy deployment.
 * Extensions to allow other sequence generation tasks such as summarization and image captioning.
 
